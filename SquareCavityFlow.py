@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+#!/usr/bin/python2
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import cm
@@ -85,6 +88,35 @@ f_int_v = interp2d(Xv[0, :], Yv[:, 0].T, v, kind='linear')
 # Extend pressure + vorticity
 Xpp, Ypp, PP, omega = my_functions.postprocess(n, u, v, P)
 
+
+"""Streamfunctions
+Defined as:
+(u,v) = (dψ/dy, dpsi/dx)
+
+Thus
+ψ(x,y) = ∫_y0^y u(x,ξ) dξ
+or
+ψ(x,y) = -∫_x0^x v(ξ,y) dξ
+
+We don't need some fancy numerical integration scheme. Summing is enough because
+we explicit state that u is constant over a cell face. Since mass is conserved,
+the cumulative sum should equal zero at the upper boundary.
+"""
+
+# Manual cumsum
+psi = np.zeros((n+1, n+1))
+for i in range(n):
+    for j in range(n):
+        psi[i+1, j+1] = psi[i, j+1] + u[i+1, j+1]*dx
+
+# same just shorter
+psi2 = np.cumsum(u*dx,0)
+psi2 = psi2[:-1]
+
+psi3 = -np.cumsum(v*dx,1)
+psi3 = psi3[:,:-1]
+
+
 ## Plot results
 plt.ion()  # turn on interactive mode
 fig1 = plt.figure(1)
@@ -120,6 +152,34 @@ ax3.set_title('Vorticity')
 ax3.set_xlabel('x')
 ax3.set_ylabel('y')
 ax3.grid(True)
-fig1.colorbar(p3, ax=ax3)
-
+fig1.colorbar(p3, ax=3)
 fig1.show()
+
+
+# Isolines:
+# Set contour levels. From the article "High-Re Solutions for Incompressible
+# Using the Navier-Stokes Equations Multigrid Method".
+# By U. GHIA, K. N. GHIA, AND C. T. SHIN
+if int(Re) == 1000:
+    levels = np.array([
+        -1e-10, -1e-07, -1e-05, -1e-04, -1e-03, -0.0100, -0.0300, -0.0500,
+        -0.0700, -0.0900, -0.1000, -0.1100, -0.1150, -0.1175, 1.0e-8, 1.0e-7,
+        1.0e-6, 1.0e-5, 5.0e-5, 1.0e-4, 5.0e-4, 1.0e-3, 1.5e-3, 3.0e-3])
+    # because Ulid = -1, whereas the article have Ulid = 1, we need the levels
+    # with opposite signs. Remember that sign change for the streamfunction
+    # means the flow is flowing in the opposite direction.
+    levels = - levels
+
+fig1 = plt.figure(2)
+fig1.clf()
+ax = fig1.add_subplot(111)
+if int(Re) == 1000:
+    ax.contour(Xi, Yi, psi, levels=levels, colors='k')
+else:
+    ax.contour(Xi, Yi, psi, 10, colors='k')
+
+plt.title('Isolines from Streamfunction')
+plt.xlabel('x')
+plt.ylabel('y')
+plt.grid(True)
+ax.set_aspect('equal')
