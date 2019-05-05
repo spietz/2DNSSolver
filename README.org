@@ -1,3 +1,0 @@
-* Simple 2D Navier Stokes Solver
-** Finite volume discretization on staggered grid
-** Explicit Euler time stepping
