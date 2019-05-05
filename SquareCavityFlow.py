@@ -10,10 +10,10 @@ from scipy.interpolate import interp2d
 import my_functions
 
 ## Input
-n = 21  # number of cells along x,y-axis
-Re = 1.0  # global Reynolds number
+n = 61  # number of cells along x,y-axis
+Re = 100.0  # global Reynolds number
 Ulid = -1.0  # lid velocity (+-1)
-maxstep = 1e6  # maximum number of explicit Euler time steps
+maxstep = int(1e6)  # maximum number of explicit Euler time steps
 steadytol = 1.0e-6  # tolerance on dUmax/dt to reach steady solution
 statstride = 1e2  # stride for writting status to screen
 
@@ -34,7 +34,7 @@ u[n+1, :] = Ulid  # set lid velocity in u-array
 P = np.zeros((n, n))  # alloc pressure array
 gmchist = np.zeros(maxstep)  # alloc global mass conservation hist. vector
 cmchist = np.zeros(maxstep)  # alloc max. cell mass conserva. hist. vector
-steadyhist = np.ones(maxstep)  # alloc global steady solution hist. vector
+steadyhist = np.zeros(maxstep)  # alloc global steady solution hist. vector
 
 ## Assemble and factorize Laplacian operator matrix
 A = my_functions.LaplaceMatrix(n)
@@ -65,6 +65,7 @@ while step < maxstep and change > steadytol:
     dudt = H1[:, 1:n] - 1./dx * (P[:, 1:n] - P[:, 0:n-1])
     dvdt = H2[1:n, :] - 1./dx * (P[1:n, :] - P[0:n-1, :])
     change = max(np.max(dudt), np.max(dvdt))
+    steadyhist[step-1] = change
 
     # Step forward interiour cells
     u[1:n+1, 1:n] = u[1:n+1, 1:n] + dt*dudt
@@ -75,9 +76,9 @@ while step < maxstep and change > steadytol:
                    + v[1:n+1, 1:n+1] - v[0:n, 1:n+1])
     cmchist[step-1] = np.max(np.max(LMC, 0), 0)
     gmchist[step-1] = np.sum(np.sum(LMC, 0))
-
+    
     if (step % statstride) == 0:
-        print('Step=%i, change=%0.3f' % (step, change))
+        print('Step=%i, change=%3.2e' % (step, change))
 
 
 ## Interpolate functions to P-grid
@@ -119,44 +120,12 @@ psi3 = psi3[:,:-1]
 
 ## Plot results
 plt.ion()  # turn on interactive mode
+
 fig1 = plt.figure(1)
 fig1.clf()
 
 # Streamlines
-ax1 = fig1.add_subplot(1, 3, 1)
-p1 = ax1.streamplot(Xi, Yi,  # only supports an evenly spaced grid
-                f_int_u(Xi[0, :], Yi[:, 0]),
-                f_int_v(Xi[0, :], Yi[:, 0]),
-                density=1, linewidth=2,
-                norm=None, arrowsize=1, arrowstyle='-|>', minlength=0.3)
-ax1.set_title('Streamlines')
-ax1.set_xlabel('x')
-ax1.set_ylabel('y')
-ax1.grid(True)
-ax1.set_xlim(0, 1)
-ax1.set_ylim(0, 1)
-
-# Pressure
-ax2 = fig1.add_subplot(1, 3, 2)
-p2 = ax2.contourf(Xpp, Ypp, PP, cmap=cm.coolwarm)
-ax2.set_title('Dynamic pressure')
-ax2.set_xlabel('x')
-ax2.set_ylabel('y')
-ax2.grid(True)
-fig1.colorbar(p2, ax=ax2)
-
-# Vorticity
-ax3 = fig1.add_subplot(1, 3, 3)
-p3 = ax3.contourf(Xi, Yi, omega, cmap=cm.coolwarm)
-ax3.set_title('Vorticity')
-ax3.set_xlabel('x')
-ax3.set_ylabel('y')
-ax3.grid(True)
-fig1.colorbar(p3, ax=3)
-fig1.show()
-
-
-# Isolines:
+# Contours of the stream function:
 # Set contour levels. From the article "High-Re Solutions for Incompressible
 # Using the Navier-Stokes Equations Multigrid Method".
 # By U. GHIA, K. N. GHIA, AND C. T. SHIN
@@ -169,17 +138,50 @@ if int(Re) == 1000:
     # with opposite signs. Remember that sign change for the streamfunction
     # means the flow is flowing in the opposite direction.
     levels = - levels
-
-fig1 = plt.figure(2)
-fig1.clf()
-ax = fig1.add_subplot(111)
-if int(Re) == 1000:
-    ax.contour(Xi, Yi, psi, levels=levels, colors='k')
 else:
-    ax.contour(Xi, Yi, psi, 10, colors='k')
+    levels = np.array([-0.1, -0.08, -0.06, -0.04, -0.02, -0.01, -3e-3,
+                       -1e-3, -3e-4, -1e-4, -3e-5, -1e-5, -3e-6, -1e-6, -1e-7, -1e-8,
+                       -1e-9, -1e-10, 0.0 , 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 3e-6, 1e-5,
+                       3e-5, 1e-4, 3e-4, 1e-3, 3e-3, 0.01 , 0.03 , 0.05 , 0.07 , 0.09,
+                       0.1 , 0.11 , 0.115, 0.1175])
 
-plt.title('Isolines from Streamfunction')
-plt.xlabel('x')
-plt.ylabel('y')
-plt.grid(True)
-ax.set_aspect('equal')
+ax1 = fig1.add_subplot(2, 2, 1)
+ax1.contour(Xi, Yi, psi, levels, colors='k', linewidths=0.5)
+ax1.set_title('Stream function')
+ax1.set_xlabel('x/L')
+ax1.set_ylabel('y/L')
+ax1.set_aspect('equal')
+plt.tight_layout()
+ax1.set_xlim(0, 1)
+ax1.set_ylim(0, 1)
+plt.tight_layout()
+
+# Pressure
+ax2 = fig1.add_subplot(2, 2, 2)
+p2 = ax2.contourf(Xpp, Ypp, PP, cmap=cm.bwr)
+ax2.set_title('Dynamic pressure')
+ax2.set_xlabel('x/L')
+ax2.set_ylabel('y/L')
+fig1.colorbar(p2, ax=ax2)
+ax2.set_aspect('equal')
+plt.tight_layout()
+
+# Vorticity
+ax3 = fig1.add_subplot(2, 2, 3)
+p3 = ax3.contourf(Xi, Yi, omega, cmap=cm.bwr)
+ax3.set_title('Vorticity')
+ax3.set_xlabel('x/L')
+ax3.set_ylabel('y/L')
+fig1.colorbar(p3, ax=ax3)
+ax3.set_aspect('equal')
+plt.tight_layout()
+
+# Steady state convergence
+ax4 = fig1.add_subplot(2, 2, 4)
+ax4.plot(range(step), steadyhist[:step])
+ax4.set_title('Change history')
+ax4.set_xlabel('step')
+ax4.set_ylabel(r'$\max{|\frac{du_i}{dt}|}$')
+ax4.grid(True)
+ax4.set_yscale('log')
+plt.tight_layout()
